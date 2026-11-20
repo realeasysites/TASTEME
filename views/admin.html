@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Inquiry Dashboard · Taste ME</title>
+  <link rel="icon" href="/images/favicon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Lilita+One&family=DM+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    *{box-sizing:border-box}
+    body{margin:0;background:#fff8e1;font-family:'DM Sans',system-ui,sans-serif;color:#0b2a6b}
+    header{background:#005ab4;color:#fff;padding:14px 22px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+    header img{height:44px}
+    header h1{font-family:'Lilita One',sans-serif;font-weight:400;font-size:1.3rem;margin:0;flex:1}
+    header button{background:#ffcf00;color:#0b2a6b;border:0;border-radius:999px;padding:9px 18px;font:inherit;font-weight:700;cursor:pointer}
+    main{max-width:1100px;margin:0 auto;padding:24px 18px 60px}
+    .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:20px}
+    .stat{background:#fff;border:2px solid #0b2a6b;border-radius:16px;padding:14px 16px}
+    .stat b{display:block;font-family:'Lilita One',sans-serif;font-weight:400;font-size:1.8rem;color:#005ab4}
+    .filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px}
+    .filters button{border:2px solid #0b2a6b;background:#fff;color:#0b2a6b;border-radius:999px;padding:7px 14px;font:inherit;font-weight:600;cursor:pointer}
+    .filters button.on{background:#0b2a6b;color:#fff}
+    .list{display:grid;gap:14px}
+    .item{background:#fff;border:2px solid #0b2a6b;border-radius:18px;padding:18px;box-shadow:5px 5px 0 #ffcf00}
+    .top{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start}
+    .name{font-weight:700;font-size:1.15rem}
+    .type{display:inline-block;background:#ffcf00;border-radius:999px;padding:3px 10px;font-size:.8rem;font-weight:700;margin-left:6px;vertical-align:middle}
+    .when{font-size:.85rem;opacity:.7}
+    .meta{display:flex;flex-wrap:wrap;gap:6px 18px;margin:10px 0;font-size:.95rem}
+    .meta a{color:#005ab4;font-weight:600}
+    .msg{background:#fff8e1;border-radius:12px;padding:10px 12px;white-space:pre-wrap;font-size:.95rem}
+    .actions{display:flex;gap:10px;margin-top:12px;align-items:center;flex-wrap:wrap}
+    select{padding:8px 10px;border:2px solid #0b2a6b;border-radius:10px;font:inherit;font-weight:600}
+    .del{margin-left:auto;background:#fff;color:#c62828;border:2px solid #c62828;border-radius:10px;padding:7px 14px;font:inherit;font-weight:700;cursor:pointer}
+    .del:hover{background:#c62828;color:#fff}
+    .s-new{border-left:8px solid #005ab4}.s-contacted{border-left:8px solid #ffa000}.s-booked{border-left:8px solid #2e7d32}.s-closed{border-left:8px solid #9e9e9e;opacity:.75}
+    .empty{text-align:center;padding:50px 20px;background:#fff;border:2px dashed #0b2a6b;border-radius:18px}
+  </style>
+</head>
+<body>
+  <header>
+    <img src="/images/wordmark.png" alt="Taste ME">
+    <h1>Catering &amp; Event Inquiries</h1>
+    <button id="logout">Sign out</button>
+  </header>
+  <main>
+    <div class="stats" id="stats"></div>
+    <div class="filters" id="filters"></div>
+    <div class="list" id="list"></div>
+  </main>
+  <script>
+    const STATUSES = ['new', 'contacted', 'booked', 'closed'];
+    let rows = [];
+    let filter = 'all';
+
+    const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const fmt = (d) => new Date(d.replace(' ', 'T') + 'Z').toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+
+    async function api(url, opts = {}) {
+      const res = await fetch(url, { headers: { 'Content-Type': 'application/json' }, ...opts });
+      if (res.status === 401) { location.reload(); throw new Error('signed out'); }
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Request failed');
+      return res.json();
+    }
+
+    async function load() {
+      rows = await api('/api/admin/inquiries');
+      render();
+    }
+
+    function render() {
+      const count = (s) => rows.filter((r) => r.status === s).length;
+      document.getElementById('stats').innerHTML =
+        `<div class="stat"><b>${rows.length}</b>Total</div>` +
+        STATUSES.map((s) => `<div class="stat"><b>${count(s)}</b>${s[0].toUpperCase() + s.slice(1)}</div>`).join('');
+
+      document.getElementById('filters').innerHTML = ['all', ...STATUSES]
+        .map((s) => `<button data-f="${s}" class="${filter === s ? 'on' : ''}">${s[0].toUpperCase() + s.slice(1)}</button>`).join('');
+
+      const shown = filter === 'all' ? rows : rows.filter((r) => r.status === filter);
+      const list = document.getElementById('list');
+      if (!shown.length) { list.innerHTML = '<div class="empty">No inquiries here yet.</div>'; return; }
+
+      list.innerHTML = shown.map((r) => `
+        <article class="item s-${esc(r.status)}">
+          <div class="top">
+            <div><span class="name">${esc(r.name)}</span><span class="type">${esc(r.type)}</span></div>
+            <div class="when">${fmt(r.created_at)}</div>
+          </div>
+          <div class="meta">
+            ${r.phone ? `<span>📞 <a href="tel:${esc(r.phone)}">${esc(r.phone)}</a></span>` : ''}
+            ${r.email ? `<span>✉️ <a href="mailto:${esc(r.email)}">${esc(r.email)}</a></span>` : ''}
+            ${r.event_date ? `<span>📅 ${esc(r.event_date)}</span>` : ''}
+            ${r.guests ? `<span>👥 ${esc(r.guests)} guests</span>` : ''}
+          </div>
+          ${r.message ? `<div class="msg">${esc(r.message)}</div>` : ''}
+          <div class="actions">
+            <label>Status
+              <select data-id="${r.id}" class="status">
+                ${STATUSES.map((s) => `<option value="${s}" ${s === r.status ? 'selected' : ''}>${s}</option>`).join('')}
+              </select>
+            </label>
+            <button class="del" data-id="${r.id}">Delete</button>
+          </div>
+        </article>`).join('');
+    }
+
+    document.addEventListener('click', async (e) => {
+      const f = e.target.closest('[data-f]');
+      if (f) { filter = f.dataset.f; render(); return; }
+      const del = e.target.closest('.del');
+      if (del) {
+        if (!confirm('Delete this inquiry? This can’t be undone.')) return;
+        try { await api('/api/admin/inquiries/' + del.dataset.id, { method: 'DELETE' }); await load(); }
+        catch (err) { alert(err.message); }
+      }
+    });
+
+    document.addEventListener('change', async (e) => {
+      if (!e.target.classList.contains('status')) return;
+      try {
+        await api('/api/admin/inquiries/' + e.target.dataset.id, { method: 'PATCH', body: JSON.stringify({ status: e.target.value }) });
+        await load();
+      } catch (err) { alert(err.message); }
+    });
+
+    document.getElementById('logout').addEventListener('click', async () => {
+      await fetch('/api/admin/logout', { method: 'POST' });
+      location.reload();
+    });
+
+    load();
+  </script>
+</body>
+</html>
